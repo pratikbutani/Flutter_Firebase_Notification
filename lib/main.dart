@@ -20,14 +20,32 @@ class MyAppState extends State<MyApp> {
       FlutterLocalNotificationsPlugin();
 
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging();
+
+  String fcmToken = "Getting Firebase Token";
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('notification'),
+        title: Text('Flutter FCM Notification'),
       ),
-      body: Center(
-        child: Text('button'),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              "FCM TOKEN:",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 15),
+            Text(
+              fcmToken,
+              style: TextStyle(fontSize: 18),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -45,8 +63,8 @@ class MyAppState extends State<MyApp> {
         new NotificationDetails(android: androidPlatformChannelSpecifics);
     await flutterLocalNotificationsPlugin.show(
       0,
-      'new message arrived',
-      'i want ${message['data']['title']} for ${message['data']['body']}',
+      'Welcome Notification Arrived',
+      'My title is ${message['data']['title']} with body ${message['data']['body']}',
       platformChannelSpecifics,
       payload: 'Default_Sound',
     );
@@ -54,7 +72,9 @@ class MyAppState extends State<MyApp> {
 
   getTokenz() async {
     String token = await _firebaseMessaging.getToken();
-    print(token);
+    setState(() {
+      fcmToken = token;
+    });
   }
 
   Future selectNotification(String payload) async {
@@ -62,14 +82,34 @@ class MyAppState extends State<MyApp> {
   }
 
   @override
-  void initState() {
+  Future<void> initState() {
     var initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    var initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
+    final IOSInitializationSettings initializationSettingsIOS =
+        IOSInitializationSettings(
+      requestSoundPermission: false,
+      requestBadgePermission: false,
+      requestAlertPermission: false,
+    );
+
+    // final bool result = await flutterLocalNotificationsPlugin
+    //     .resolvePlatformSpecificImplementation<
+    //         IOSFlutterLocalNotificationsPlugin>()
+    //     ?.requestPermissions(
+    //       alert: true,
+    //       badge: true,
+    //       sound: true,
+    //     );
+
+    final InitializationSettings initializationSettings =
+        InitializationSettings(
+            android: initializationSettingsAndroid,
+            iOS: initializationSettingsIOS);
+
     flutterLocalNotificationsPlugin.initialize(initializationSettings,
         onSelectNotification: selectNotification);
+
     super.initState();
 
     _firebaseMessaging.configure(

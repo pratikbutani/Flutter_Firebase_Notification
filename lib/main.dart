@@ -1,27 +1,67 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() => runApp(MaterialApp(home: MyApp()));
+Future<void> myBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  return MyAppState()._showNotification(message);
+}
+
+Future<void> main() async {
+  await WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(myBackgroundHandler);
+  runApp(MaterialApp(home: MyApp()));
+}
 
 class MyApp extends StatefulWidget {
   @override
-  State<StatefulWidget> createState() {
-    return MyAppState();
-  }
-}
-
-Future<dynamic> myBackgroundHandler(Map<String, dynamic> message) {
-  return MyAppState()._showNotification(message);
+  State<StatefulWidget> createState() => MyAppState();
 }
 
 class MyAppState extends State<MyApp> {
   FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging();
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   String fcmToken = "Getting Firebase Token";
+
+  @override
+  Future<void> initState() {
+    /**
+     * Requesting Permission
+     */
+    requestingPermissionForIOS();
+
+    var initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    final IOSInitializationSettings initializationSettingsIOS =
+        IOSInitializationSettings(
+      requestSoundPermission: false,
+      requestBadgePermission: false,
+      requestAlertPermission: false,
+    );
+
+    final InitializationSettings initializationSettings =
+        InitializationSettings(
+            android: initializationSettingsAndroid,
+            iOS: initializationSettingsIOS);
+
+    flutterLocalNotificationsPlugin.initialize(initializationSettings,
+        onSelectNotification: selectNotification);
+
+    super.initState();
+
+    FirebaseMessaging.onMessage.listen((message) {
+      print(message);
+      if (message.data.isNotEmpty) MyAppState()._showNotification(message);
+    });
+
+    getTokenz();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,93 +90,78 @@ class MyAppState extends State<MyApp> {
     );
   }
 
-  Future _showNotification(Map<String, dynamic> message) async {
-    var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
-      'test_channel',
-      'Testing Channel',
-      'Testing Description',
+  requestingPermissionForIOS() async {
+    NotificationSettings settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      print('User granted permission');
+    } else if (settings.authorizationStatus ==
+        AuthorizationStatus.provisional) {
+      print('User granted provisional permission');
+    } else {
+      print('User declined or has not accepted permission');
+    }
+
+    await FirebaseMessaging.instance
+        .setForegroundNotificationPresentationOptions(
+      alert: true, // Required to display a heads up notification
+      badge: true,
+      sound: true,
+    );
+  }
+
+  Future _showNotification(RemoteMessage message) async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel', // id
+      'High Importance Notifications', // title
+      'This channel is used for important notifications.', // description
       importance: Importance.max,
-      priority: Priority.high,
     );
 
-    var platformChannelSpecifics =
-        new NotificationDetails(android: androidPlatformChannelSpecifics);
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      'Welcome Notification Arrived',
-      'My title is ${message['data']['title']} with body ${message['data']['body']}',
-      platformChannelSpecifics,
-      payload: 'Default_Sound',
-    );
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    print(message.data);
+    Map<String, dynamic> data = message.data;
+    AndroidNotification android = message.notification?.android;
+    if (data != null) {
+      flutterLocalNotificationsPlugin.show(
+        0,
+        data['title'],
+        data['body'],
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.id,
+            channel.name,
+            channel.description,
+            icon: android?.smallIcon,
+            // other properties...
+          ),
+          iOS: IOSNotificationDetails(presentAlert: true, presentSound: true),
+        ),
+        payload: 'Default_Sound',
+      );
+    }
   }
 
   getTokenz() async {
     String token = await _firebaseMessaging.getToken();
     setState(() {
       fcmToken = token;
+      print(fcmToken);
     });
   }
 
   Future selectNotification(String payload) async {
     await flutterLocalNotificationsPlugin.cancelAll();
-  }
-
-  @override
-  Future<void> initState() {
-    var initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    final IOSInitializationSettings initializationSettingsIOS =
-        IOSInitializationSettings(
-      requestSoundPermission: false,
-      requestBadgePermission: false,
-      requestAlertPermission: false,
-    );
-
-    // final bool result = await flutterLocalNotificationsPlugin
-    //     .resolvePlatformSpecificImplementation<
-    //         IOSFlutterLocalNotificationsPlugin>()
-    //     ?.requestPermissions(
-    //       alert: true,
-    //       badge: true,
-    //       sound: true,
-    //     );
-
-    final InitializationSettings initializationSettings =
-        InitializationSettings(
-            android: initializationSettingsAndroid,
-            iOS: initializationSettingsIOS);
-
-    flutterLocalNotificationsPlugin.initialize(initializationSettings,
-        onSelectNotification: selectNotification);
-
-    super.initState();
-
-    _firebaseMessaging.configure(
-      onBackgroundMessage: myBackgroundHandler,
-      onMessage: (Map<String, dynamic> message) async {
-        print("onMessage: $message");
-        showDialog(
-            context: context,
-            builder: (context) {
-              return AlertDialog(
-                title: Text('new message arived'),
-                content: Text(
-                    'i want ${message['data']['title']} for ${message['data']['body']}'),
-                actions: <Widget>[
-                  FlatButton(
-                    child: Text('Ok'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              );
-            });
-        MyAppState()._showNotification(message);
-      },
-    );
-
-    getTokenz();
   }
 }

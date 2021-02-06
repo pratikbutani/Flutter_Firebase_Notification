@@ -11,7 +11,7 @@
 	   android:theme="@style/LaunchTheme" -->
 	<uses-permission android:name="android.permission.INTERNET" />
 	<application
-		android:name="com.example.fcm_flutter_notification.Application"
+		android:name="io.flutter.app.FlutterApplication"
 		android:icon="@mipmap/ic_launcher"
 		android:label="notification">
 		<activity
